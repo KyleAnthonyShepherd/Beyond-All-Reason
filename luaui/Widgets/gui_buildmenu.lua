@@ -233,6 +233,8 @@ local disableWind = ((Game.windMin + Game.windMax) / 2) < 5
 
 local unitEnergyCost = {}
 local unitMetalCost = {}
+local unitBuildtimeCost = {}
+local avaliableBuildPower = 100
 local unitGroup = {}
 local unitRestricted = {}
 local unitDisabled = {}
@@ -248,6 +250,7 @@ for unitDefID, unitDef in pairs(UnitDefs) do
 	unitIconType[unitDefID] = unitDef.iconType
 	unitEnergyCost[unitDefID] = unitDef.energyCost
 	unitMetalCost[unitDefID] = unitDef.metalCost
+	unitBuildtimeCost[unitDefID] = unitDef.buildTime
 	unitGroup[unitDefID] = unitDef.customParams.unitgroup
 
 	if unitDef.name == 'armdl' or unitDef.name == 'cordl' or unitDef.name == 'armlance' or unitDef.name == 'cortitan'
@@ -430,6 +433,7 @@ local function RefreshCommands()
 						name = UnitDefs[uDefID].name,
 						params = {}
 					}
+					avaliableBuildPower = 300
 				end
 			end
 		end
@@ -602,6 +606,57 @@ function widget:Update(dt)
 				end
 			end
 		end
+
+		-- figure out selected buildpower, for ETA calculations
+		SelectedUnits = Spring.GetSelectedUnits()
+		avaliableBuildPower = 0
+		if (#SelectedUnits > 1) or (#SelectedUnits == 0) then
+			-- sum up all selected builder's buildpower
+			-- and handle zero selected units case
+			for i=1,#SelectedUnits do
+				local Sunit = Spring.GetUnitDefID(SelectedUnits[i])
+				if UnitDefs[Sunit].canAssist == true and UnitDefs[Sunit].isBuilder == true then
+					avaliableBuildPower = avaliableBuildPower + UnitDefs[Sunit].buildSpeed
+				end
+			end
+		else
+			-- only one unit selected
+			local Sunit = Spring.GetUnitDefID(SelectedUnits[1])
+			avaliableBuildPower = UnitDefs[Sunit].buildSpeed
+			if (UnitDefs[Sunit].isFactory == true) then
+				-- factory selected case
+
+				-- get nearby units in nanoturret range (400)
+				local xx,yy,zz = Spring.GetUnitPosition(SelectedUnits[1])
+				local nearunits = Spring.GetUnitsInCylinder(xx,zz,400)
+				for i=1,#nearunits do
+				
+					local Nunit = Spring.GetUnitDefID(nearunits[i])
+					if string.find(UnitDefs[Nunit].name, "nanotc") then
+						-- if nearby unit is a nanotower, assume it will assist this factory
+						avaliableBuildPower = avaliableBuildPower + UnitDefs[Nunit].buildSpeed
+					else
+						-- if nearby unit is assisting the factory, add its buildpower
+						local cQueue=Spring.GetCommandQueue(nearunits[i],2) or {}
+						if (#cQueue > 0) then
+							for k=1,#cQueue do
+								local cmd_queue = cQueue[k]
+								if (cmd_queue.id == CMD.GUARD) and (cmd_queue.params[1] == SelectedUnits[1]) then
+									avaliableBuildPower = avaliableBuildPower + UnitDefs[Nunit].buildSpeed
+								end
+							end
+						end
+					end
+				end
+			end
+		end	
+
+		--fallback value
+		--Spring.Echo(avaliableBuildPower)
+		if avaliableBuildPower == 0 then
+			avaliableBuildPower = 100
+		end
+
 	end
 
 	sec = sec + dt
@@ -724,7 +779,21 @@ local function drawCell(cellRectID, usedZoom, cellColor, disabled)
 		else
 			text = "\255\245\245\245" .. unitMetalCost[uDefID] .. "\n\255\255\255\000"
 		end
-		font2:Print(text .. unitEnergyCost[uDefID], cellRects[cellRectID][1] + cellPadding + (cellInnerSize * 0.048), cellRects[cellRectID][2] + cellPadding + (priceFontSize * 1.35), priceFontSize, "o")
+		text = text .. unitEnergyCost[uDefID]
+		-- standard unit icon price display
+		font2:Print(text, cellRects[cellRectID][1] + cellPadding + (cellInnerSize * 0.048), cellRects[cellRectID][2] + cellPadding + (priceFontSize * 1.35), priceFontSize, "o")
+
+		--[[
+		-- unit icon price display with buildtime 
+		buildtime = unitBuildtimeCost[uDefID]/avaliableBuildPower
+		contime = 0
+		minutes=math.floor(buildtime/60)
+		seconds=math.floor(buildtime%60+0.5)
+		seconds=string.format("%02d",seconds)
+		contime=minutes .. ':' .. seconds
+		text = text .. "\n\255\000\192\000" .. contime
+		font2:Print(text, cellRects[cellRectID][1] + cellPadding + (cellInnerSize * 0.048), cellRects[cellRectID][2] + cellPadding + (priceFontSize * 2.25), priceFontSize, "o")
+		]]--
 	end
 
 	-- debug order value
@@ -1071,7 +1140,94 @@ function widget:DrawScreen()
 								else
 									text = UnitDefs[uDefID].translatedHumanName
 								end
-								WG['tooltip'].ShowTooltip('buildmenu', "\255\240\240\240"..UnitDefs[uDefID].translatedTooltip, nil, nil, text)
+
+								-- monospace text formatting nonsense
+								padding = math.max(4,string.len(unitMetalCost[uDefID]),string.len(unitEnergyCost[uDefID]),string.len(unitBuildtimeCost[uDefID]))
+
+								--text_mono = "\255\240\240\240" .. "   cost"
+								text_mono = "\255\240\240\240" .. "   "
+								for ii=4,padding do
+									text_mono = text_mono .. ' '
+								end
+								text_mono = text_mono .. 'cost'
+
+								for ii=4,padding+2 do
+									text_mono = text_mono .. ' '
+								end
+								text_mono = text_mono .. "rate"
+
+								text_mono = '255\255\180\80' ..  "LuaUI/Images/wrench.png" .. " selected " .. " " .. string.format("%d",avaliableBuildPower)
+
+								text_mono = "\255\240\240\240" .. "   expense"
+								buildtime = unitBuildtimeCost[uDefID]/avaliableBuildPower
+								
+								minutes=math.floor(buildtime/60)
+								seconds=math.floor(buildtime%60+0.5)
+								seconds=string.format("%02d",seconds)
+								contime=minutes .. ':' .. seconds
+								selBuildPower = string.format("%d",avaliableBuildPower)
+								
+								metalrate = math.floor(10*unitMetalCost[uDefID]/buildtime+0.5)/10
+								metalrate = string.format("%02.1f",metalrate)
+								energyrate = math.floor(10*unitEnergyCost[uDefID]/buildtime+0.5)/10
+								energyrate = string.format("%02.1f",energyrate)
+
+								rate_padding = math.max(7,string.len(metalrate),string.len(energyrate),string.len(contime),string.len(selBuildPower))
+
+								--text_mono = text_mono .. "\n\255\255\255\255" .. "LuaUI/Images/metal_text_icon.png" .. " " .. unitMetalCost[uDefID]
+								text_mono = text_mono .. "\n\255\255\255\255" .. "LuaUI/Images/metal_text_icon.png" .. ""
+								--[[
+								argv = string.format("%d",unitMetalCost[uDefID])
+								local _, count_ones = string.gsub(argv, "1", "")
+								for ii=string.len(unitMetalCost[uDefID]),padding do
+									text_mono = text_mono .. ' '
+								end
+								text_mono = text_mono .. unitMetalCost[uDefID]
+								]]--
+								for ii=string.len(metalrate)+1,rate_padding do
+									text_mono = text_mono .. ' '
+								end
+								text_mono = text_mono .. "-" .. metalrate
+								
+								--text_mono = text_mono .. "\n\255\240\240\000" .. "LuaUI/Images/energy.png" .. " " .. unitEnergyCost[uDefID]
+								text_mono = text_mono .. "\n\255\240\240\000" .. "LuaUI/Images/energy.png" .. ""
+								--[[
+								argv = string.format("%d",unitEnergyCost[uDefID])
+								for ii=string.len(unitEnergyCost[uDefID]),padding do
+									text_mono = text_mono .. ' '
+								end
+								text_mono = text_mono .. unitEnergyCost[uDefID]
+								]]--
+								for ii=string.len(energyrate)+1,rate_padding do
+									text_mono = text_mono .. ' '
+								end
+								text_mono = text_mono .. "-" .. energyrate
+								
+								--text_mono = text_mono .. "\n\255\087\207\243"  .. "LuaUI/Images/clock_transparent2.png" .. " " .. unitBuildtimeCost[uDefID]
+								-- 43b2d4 HTML color, "\n\255\087\207\243", blue
+								-- '\255\128\255\128' -- Light green
+								text_mono = text_mono .. "\n\255\102\204\102"  .. "LuaUI/Images/clock_transparent_green.png" .. ""
+								--[[
+								argv = string.format("%d",unitBuildtimeCost[uDefID])
+								for ii=string.len(unitBuildtimeCost[uDefID]),padding do
+									text_mono = text_mono .. ' '
+								end
+								text_mono = text_mono .. unitBuildtimeCost[uDefID]
+								]]--
+								for ii=string.len(contime),rate_padding do
+									text_mono = text_mono .. ' '
+								end
+								text_mono = text_mono .. "" .. contime
+
+								--text_mono = text_mono .. '\n\255\255\180\80' .. "selected " .. "LuaUI/Images/wrench.png" .. " " .. string.format("%d",avaliableBuildPower)
+								text_mono = text_mono .. '\n\255\255\180\80' ..  "LuaUI/Images/wrench.png"
+								for ii=string.len(selBuildPower),rate_padding do
+									text_mono = text_mono .. ' '
+								end
+								text_mono = text_mono .. "" .. selBuildPower
+								--END monospace text formatting nonsense
+
+								WG['tooltip'].ShowTooltip('buildmenu', "\255\240\240\240"..UnitDefs[uDefID].translatedTooltip, nil, nil, text,text_mono)
 							end
 
 							-- highlight --if b and not disableInput then
@@ -1541,10 +1697,10 @@ function widget:MousePress(x, y, button)
 				end
 				local bx, by, bz = Spring.Pos2BuildPos(selBuildQueueDefID, pos[1], pos[2], pos[3])
 				local buildFacing = Spring.GetBuildFacing()
-				local buildData = { selBuildQueueDefID, bx, by, bz, buildFacing }
-				local cx, cy, cz = Spring.GetTeamStartPosition(myTeamID) -- Returns -100, -100, -100 when none chosen
-				local _, _, meta, shift = Spring.GetModKeyState()
-
+					local buildData = { selBuildQueueDefID, bx, by, bz, buildFacing }
+									local cx, cy, cz = Spring.GetTeamStartPosition(myTeamID) -- Returns -100, -100, -100 when none chosen
+					local _, _, meta, shift = Spring.GetModKeyState()
+					
 				if (meta or not shift) and cx ~= -100 then
 					local cbx, cby, cbz = Spring.Pos2BuildPos(startDefID, cx, cy, cz)
 

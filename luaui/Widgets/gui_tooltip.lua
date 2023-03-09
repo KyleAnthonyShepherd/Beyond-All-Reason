@@ -16,7 +16,7 @@ end
 WG['tooltip'].AddTooltip(name, area, value, delay, x, y, title)  -- area: {x1,y1,x2,y2}   value(optional): 'text'   delay(optional): #seconds   x/y(optional): display coordinates   title(optional): 'text'
 WG['tooltip'].RemoveTooltip(name)
 
-WG['tooltip'].ShowTooltip(name, value, x, y, title)    -- value(optional): 'text'   x/y (optional): display coordinates   title(optional): 'text'
+WG['tooltip'].ShowTooltip(name, value, x, y, title, mono_space_table)    -- value(optional): 'text'   x/y (optional): display coordinates   title(optional): 'text' mono_space_table(optional): 'text'
 
 You can use 'AddTooltip' to add a screen area that will display a tooltip when you hover over it
 
@@ -33,6 +33,7 @@ local yOffset = -xOffset
 
 local fontfile = "fonts/" .. Spring.GetConfigString("bar_font", "Poppins-Regular.otf")
 local fontfile2 = "fonts/" .. Spring.GetConfigString("bar_font2", "Exo2-SemiBold.otf")
+local fontfilemono = "fonts/monospaced/" .. Spring.GetConfigString("bar_font3", "SourceCodePro-Medium.otf")
 
 local vsx, vsy = Spring.GetViewGeometry()
 local widgetScale = 1
@@ -47,7 +48,7 @@ local string_lines = string.lines
 local ui_scale = tonumber(Spring.GetConfigFloat("ui_scale", 1) or 1)
 local tooltips = {}
 local cleanupGuishaderAreas = {}
-local font, font2, chobbyInterface
+local font, font2, fontmono, chobbyInterface
 local RectRound, UiElement, bgpadding
 local uiSec = 0
 
@@ -89,8 +90,8 @@ function widget:Initialize()
 				tooltips[name] = nil
 			end
 		end
-		WG['tooltip'].ShowTooltip = function(name, value, x, y, title)
-			if value ~= nil or title ~= nil then
+		WG['tooltip'].ShowTooltip = function(name, value, x, y, title, mono_space_table)
+			if value ~= nil or title ~= nil or mono_space_table ~= nil then
 				if not tooltips[name] then
 					tooltips[name] = {}
 					if tooltips[name].value ~= nil then
@@ -99,11 +100,18 @@ function widget:Initialize()
 					if tooltips[name].title ~= nil then
 						tooltips[name].title = tostring(title)
 					end
+					if tooltips[name].mono_space_table ~= nil then
+						tooltips[name].mono_space_table = tostring(mono_space_table)
+					end
 				else
 					tooltips[name].disabled = false
-					if tooltips[name].value ~= value or tooltips[name].title ~= title then
+					new_value = (tooltips[name].value ~= value)
+					new_title = (tooltips[name].title ~= title)
+					new_mono_table = (tooltips[name].mono_space_table ~= mono_space_table)
+					if new_value or new_title or new_mono_table then
 						tooltips[name].value = value ~= nil and tostring(value) or nil
 						tooltips[name].title = title ~= nil and tostring(title) or nil
+						tooltips[name].mono_space_table = mono_space_table ~= nil and tostring(mono_space_table) or nil
 						if tooltips[name].dlist then
 							tooltips[name].dlist = gl.DeleteList(tooltips[name].dlist)
 							cleanupGuishaderAreas[name] = true
@@ -115,6 +123,45 @@ function widget:Initialize()
 				end
 			end
 		end
+		--[[
+		WG['tooltip'].ShowTooltip = function(name, value, x, y, title, mono_space)
+			if value ~= nil then
+				value = tostring(value)
+				if not tooltips[name] then
+					tooltips[name] = { value = value }
+				else
+					tooltips[name].disabled = false
+					if tooltips[name].value ~= value then
+						tooltips[name].value = value
+						if tooltips[name].dlist then
+							tooltips[name].dlist = gl.DeleteList(tooltips[name].dlist)
+							cleanupGuishaderAreas[name] = true
+						end
+					end
+				end
+			end
+			if mono_space_value ~= nil then
+				mono_space_value = tostring(mono_space_value)
+				if not tooltips[name] then
+					tooltips[name] = { mono_space = mono_space_value }
+				else
+					tooltips[name].disabled = false
+					if tooltips[name].mono_space ~= mono_space_value then
+						tooltips[name].mono_space = mono_space_value
+						if tooltips[name].dlist then
+							tooltips[name].dlist = gl.DeleteList(tooltips[name].dlist)
+							cleanupGuishaderAreas[name] = true
+						end
+					end
+				end
+			else
+				tooltips[name].mono_space = nil
+			end
+			if x ~= nil and y ~= nil then
+				tooltips[name].pos = { x, y }
+			end
+		end
+		]]--
 	end
 end
 
@@ -146,6 +193,7 @@ function widget:ViewResize(x, y)
 	vsx, vsy = Spring.GetViewGeometry()
 	font = WG['fonts'].getFont(fontfile)
 	font2 = WG['fonts'].getFont(fontfile2)
+	fontmono = WG['fonts'].getFont(fontfilemono)
 	widgetScale = (1 + ((vsy - 850) / 900)) * (0.95 + (ui_scale - 1) / 2.5)
 	usedFontSize = cfgFontSize * widgetScale
 	yOffset = -math.floor(xOffset*0.75) - usedFontSize
@@ -169,6 +217,7 @@ local function drawTooltip(name, x, y)
 			local fontSize = math_floor(usedFontSize)
 			local lineHeight = fontSize + (fontSize / 4.5)
 			local lines
+			local mono_lines
 			local maxWidth = 0
 			local maxHeight = 0
 			if tooltips[name].title and tooltips[name].title ~= '' then
@@ -183,6 +232,41 @@ local function drawTooltip(name, x, y)
 					maxHeight = math_ceil(maxHeight + lineHeight)
 				end
 			end
+			if tooltips[name].mono_space_table and tooltips[name].mono_space_table ~= '' then
+				-- get text dimentions
+				mono_lines = string_lines(tooltips[name].mono_space_table)
+				for i, line in ipairs(mono_lines) do
+					-- handle in-line images
+					if string.find(line, "LuaUI/Images") then
+						ix1 = string.find(line, "LuaUI/Images")
+						ix2 = string.find(line, ".png")
+						line = string.sub(line,1,ix1-1) .. "  " .. string.sub(line,ix2+4)
+					end
+					maxWidth = math_ceil(math.max(maxWidth, (fontmono:GetTextWidth(line) * fontSize)))
+					maxHeight = math_ceil(maxHeight + lineHeight)
+				end
+			end
+
+			--[[
+			local lines = string_lines(tooltips[name].value)
+			if tooltips[name].mono_space ~= nil then
+				mono_lines = string_lines(tooltips[name].mono_space)
+			else
+				mono_lines = nil
+
+			if tooltips[name].mono_space ~= nil then
+				Spring.Echo(tooltips[name].mono_space)
+				for i, line in ipairs(mono_lines) do
+					if string.find(line, "LuaUI/Images") then
+						ix1 = string.find(line, "LuaUI/Images")
+						ix2 = string.find(line, ".png")
+						line = string.sub(line,1,ix1-1) .. "  " .. string.sub(line,ix2+4)
+					end
+					maxWidth = math_ceil(math.max(maxWidth, (fontmono:GetTextWidth(line) * fontSize)))
+					maxHeight = math_ceil(maxHeight + lineHeight)
+				end
+			end
+			]]--
 			tooltips[name].maxWidth = maxWidth
 			tooltips[name].maxHeight = maxHeight
 
@@ -208,6 +292,27 @@ local function drawTooltip(name, x, y)
 					maxHeight = maxHeight - lineHeight
 				end
 				font:End()
+			end
+			if tooltips[name].mono_space_table and tooltips[name].mono_space_table ~= nil then
+				fontmono:Begin()
+				for i, line in ipairs(mono_lines) do
+					--gl.Blending(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA)
+					if string.find(line, "LuaUI/Images") then
+						ix1 = string.find(line, "LuaUI/Images")
+						ix2 = string.find(line, ".png")
+						addXimg = fontmono:GetTextWidth(string.sub(line,1,ix1-1)) * fontSize
+						gl.Color(1, 1, 1, 1)
+						--Spring.Echo(string.sub(line,ix1,ix2+3))
+						gl.Texture(string.sub(line,ix1,ix2+3))
+						--Spring.Echo(addX,maxHeight+addY-lineHeight/4,addX+lineHeight,maxHeight+addY+lineHeight-lineHeight/4)
+						gl.TexRect(addX+addXimg,maxHeight+addY-lineHeight/4,addX+addXimg+lineHeight,maxHeight+addY+lineHeight-lineHeight/4)
+						--gl.Texture(false)
+						line = string.sub(line,1,ix1-1) .. "  " .. string.sub(line,ix2+4)
+					end
+					fontmono:Print(line, addX, maxHeight+addY, fontSize, "o")
+					maxHeight = maxHeight - lineHeight
+				end
+				fontmono:End()
 			end
 		end)
 	end
