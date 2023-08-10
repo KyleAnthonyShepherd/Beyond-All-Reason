@@ -143,11 +143,16 @@ return {
 				texture1 = "null",
 				texture2 = "smoketrailbar",
 				texture3 = "null",
+				tracks = true,
 				turnrate = 15000,
 				weaponacceleration = 100,
 				weapontimer = 3,
 				weapontype = "StarburstLauncher",
 				weaponvelocity = 800,
+				customparams = {
+					speceffect = "starburst_tracking",
+					when = "always",
+				},
 				damage = {
 					default = 800,
 				},

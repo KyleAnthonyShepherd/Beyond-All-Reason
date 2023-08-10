@@ -132,6 +132,59 @@ if gadgetHandler:IsSyncedCode() then
 		--end
     end
 
+	checkingFunctions.starburst_tracking = {}
+	checkingFunctions.starburst_tracking["always"] = function (proID)
+
+		--local target_type,_,owner_target = SpGetUnitWeaponTarget(SpGetProjectileOwnerID(proID),1)
+
+		local targetTypeInt, targetID = SpGetProjectileTarget(proID)
+		-- if the missile is heading towards a unit
+		if targetTypeInt == string.byte('u') then
+			local xt,yt,zt = Spring.GetUnitPosition(targetID)
+			Spring.SetProjectileTarget(proID,xt,yt,zt)
+			targetTypeInt, targetID = SpGetProjectileTarget(proID)
+		end
+		if targetTypeInt == string.byte('g') then
+			local powner = SpGetProjectileOwnerID(proID)
+			if powner == nil then
+				return true
+			end
+			local target_type,_,owner_target = SpGetUnitWeaponTarget(SpGetProjectileOwnerID(proID),1)
+			--local xp,yp,zp = Spring.GetProjectilePosition(proID)
+			if target_type == 1 then
+				--hardcoded to assume the retarget weapon does not target features or intercept projectiles, only targets units if not shooting ground.
+				--TODO, make this more general
+				local xt,yt,zt = Spring.GetUnitPosition(owner_target)
+				local defid = Spring.GetUnitDefID(owner_target)
+				--local footprint = UnitDefs[defid].xsize
+				--(footprint^3)*0.000075
+				--Spring.Echo(footprint)
+				local weight = UnitDefs[defid].metalCost
+				--((weight^(.75))/12320)
+				local distance = math.sqrt((xt-targetID[1])^2+(yt-targetID[2])^2+(zt-targetID[3])^2)
+				distance = math.max(1,distance)
+				local xnew = targetID[1] + ((xt-targetID[1])/distance)*weight*2.3/3800
+				local ynew = targetID[2] + ((yt-targetID[2])/distance)*weight*2.3/3800
+				local znew = targetID[3] + ((zt-targetID[3])/distance)*weight*2.3/3800
+				SpSetProjectileTarget(proID,xnew,ynew,znew)
+			end
+			if target_type == 2 then
+				local distance = math.sqrt((owner_target[1]-targetID[1])^2+(owner_target[2]-targetID[2])^2+(owner_target[3]-targetID[3])^2)
+				distance = math.max(1,distance)
+				local xnew = targetID[1] + (owner_target[1]-targetID[1])/distance*8740/3800
+				local ynew = targetID[2] + (owner_target[2]-targetID[2])/distance*8740/3800
+				local znew = targetID[3] + (owner_target[3]-targetID[3])/distance*8740/3800
+				SpSetProjectileTarget(proID,xnew,ynew,znew)
+			end
+		end
+
+		return false
+	end
+
+	applyingFunctions.starburst_tracking = function (proID)
+		return false
+    end
+
 	checkingFunctions.retarget = {}
 	checkingFunctions.retarget["always"] = function (proID)
 		-- Might be slightly more optimal to check the unit itself if it changes target,
