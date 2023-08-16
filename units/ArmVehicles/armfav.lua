@@ -1,7 +1,7 @@
 return {
 	armfav = {
-		acceleration = 0.16659,
-		brakerate = 0.33318,
+		acceleration = .025, --0.05125, --0.16659,
+		brakerate = .15, --.3
 		buildcostenergy = 370,
 		buildcostmetal = 31,
 		buildpic = "ARMFAV.DDS",
@@ -20,11 +20,11 @@ return {
 		leavetracks = false,
 		maxdamage = 89,
 		maxslope = 26,
-		maxvelocity = 5.6,
+		maxvelocity = 2.4, --5.6,
 		maxwaterdepth = 12,
 		movementclass = "TANK2",
 		nochasecategory = "VTOL",
-		objectname = "Units/ARMFAV.s3o",
+		objectname = "Units/ARMFAV2.s3o",
 		script = "Units/ARMFAV.cob",
 		seismicsignature = 0,
 		selfdestructas = "tinyExplosionGenericSelfd",
@@ -34,9 +34,9 @@ return {
 		tracktype = "armstump_tracks",
 		trackwidth = 20,
 		turninplace = true,
-		turninplaceanglelimit = 90,
+		turninplaceanglelimit = 45,
 		turninplacespeedlimit = 4.224,
-		turnrate = 653,
+		turnrate = 1024, --2048,
 		customparams = {
 			unitgroup = 'weapon',
 			basename = "base",

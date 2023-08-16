@@ -3,11 +3,13 @@
 #include "sfxtype.h"
 #include "exptype.h"
 
-piece  base, lfwheel, rfwheel, bwheel, gun, flare;
+piece  base, lfwheel, rfwheel, bwheel, gun, flare, lfwheel2, rfwheel2;
 
 static-var  restore_delay, moveSpeed, wheelSpeed, Static_Var_1, gun_2, statechg_DesiredState, statechg_StateChanging,
 			oldHeading, wpn1_lasthead;
 
+static-var  deltaheading, baseheading, basespeed, wpnheading, newchassisheading, chassisheading, goalheading, canfire;
+static-var wheelspeed1, wheelspeed2;
 // Signal definitions
 #define SIG_MOVE 			2
 #define SIG_AIM				4
@@ -56,6 +58,172 @@ Steering(heading, steer, currentSpeed)
 
 #include "unit_hitbyweaponid_and_smoke.h"
 
+BaseOrient()
+{
+	while (TRUE)
+	{
+	newchassisheading = GET 82; //get heading
+	deltaheading = newchassisheading - chassisheading;
+	chassisheading = newchassisheading;
+
+	if (deltaheading < (-32768))
+	{
+		deltaheading = deltaheading + 65536;
+	}
+	if (deltaheading > 32768)
+	{
+		deltaheading = deltaheading - 65536;
+	}
+	if (deltaheading > 0)
+	{
+		baseheading = baseheading - GET MIN(deltaheading,65536);
+	}
+	else
+	{
+		baseheading = baseheading + GET MIN(-1*deltaheading,65536);
+	}
+	if (baseheading < (-32768))
+	{
+		baseheading = baseheading + 65536;
+	}
+	if (baseheading > 32768)
+	{
+		baseheading = baseheading - 65536;
+	}
+	turn base to y-axis baseheading now; //<140>
+
+	//basespeed = (GET CURRENT_SPEED);
+	//basespeed = <3.92> *((get CURRENT_SPEED) * 100 / get MAX_SPEED);
+	basespeed = ((get CURRENT_SPEED) * 100 / get MAX_SPEED);
+	if ( basespeed > 95) 
+	{
+		//deltaheading = baseheading;
+		//if (deltaheading < (-32768))
+		//{
+		//	deltaheading = deltaheading + 65536;
+		//}
+		//if (deltaheading > 32768)
+		//{
+		//	deltaheading = deltaheading - 65536;
+		//}
+		if (baseheading > 0) //if (deltaheading > 0)
+		{
+			baseheading = baseheading - GET MIN(baseheading,300);
+		}
+		else
+		{
+			baseheading = baseheading + GET MIN(-1*baseheading,300);
+		}
+		if (baseheading < (-32768))
+		{
+			baseheading = baseheading + 65536;
+		}
+		if (baseheading > 32768)
+		{
+			baseheading = baseheading - 65536;
+		}
+	}
+	//else
+	//{
+	//	stop-spin rfwheel around x-axis;
+	//	stop-spin lfwheel around x-axis;
+	//	stop-spin rfwheel2 around x-axis;
+	//	stop-spin lfwheel2 around x-axis;
+	//}
+
+	if (baseheading > 0)
+	{
+		wheelspeed1 = GET MIN(8152,24536-baseheading);
+		wheelspeed1 = (wheelspeed1 * 100) / 8152;
+		wheelspeed2 = GET MAX(-8152,8152-baseheading);
+		wheelspeed2 = (wheelspeed2 * 100) / 8152;
+		spin lfwheel around x-axis speed <3.3> * wheelspeed1 * basespeed/100;
+		spin lfwheel2 around x-axis speed <3.3> * wheelspeed1* basespeed/100;
+		spin rfwheel around x-axis speed <3.3> * wheelspeed2* basespeed/100;
+		spin rfwheel2 around x-axis speed <3.3> * wheelspeed2* basespeed/100;
+	}
+	else
+	{
+		wheelspeed1 = GET MIN(8152,24536+baseheading);
+		wheelspeed1 = (wheelspeed1 * 100) / 8152;
+		wheelspeed2 = GET MAX(-8152,8152+baseheading);
+		wheelspeed2 = (wheelspeed2 * 100) / 8152;
+		spin lfwheel around x-axis speed <3.3> * wheelspeed2* basespeed/100;
+		spin lfwheel2 around x-axis speed <3.3> * wheelspeed2* basespeed/100;
+		spin rfwheel around x-axis speed <3.3> * wheelspeed1* basespeed/100;
+		spin rfwheel2 around x-axis speed <3.3> * wheelspeed1* basespeed/100;
+	}
+
+
+
+	sleep 1;
+	}
+}
+
+HeadingTrack()
+{
+	while (TRUE)
+	{	
+		newchassisheading = GET 82; //get heading
+		deltaheading = newchassisheading - chassisheading;
+		chassisheading = newchassisheading;
+		goalheading = goalheading - deltaheading;
+		if (goalheading < (-32768))
+		{
+			goalheading = goalheading + 65536;
+		}
+		if (goalheading > 32768)
+		{
+			goalheading = goalheading - 65536;
+		}
+
+		//center goalheading
+		// 32,768
+		// 182.044
+		// 6.068
+		deltaheading = wpnheading - goalheading;
+		if (deltaheading < (-32768))
+		{
+			deltaheading = deltaheading + 65536;
+		}
+		if (deltaheading > 32768)
+		{
+			deltaheading = deltaheading - 65536;
+		}
+		if (deltaheading > 0)
+		{
+			wpnheading = wpnheading - GET MIN(deltaheading,65536);
+		}
+		else
+		{
+			wpnheading = wpnheading + GET MIN(-1*deltaheading,65536);
+		}
+
+		if ( (GET ABS(deltaheading)) <= 65536)
+		{
+			canfire = 1;
+		}
+		else
+		{
+			canfire = 0;
+		}
+		if (wpnheading < (-32768))
+		{
+			wpnheading = wpnheading + 65536;
+		}
+		if (wpnheading > 32768)
+		{
+			wpnheading = wpnheading - 65536;
+		}
+		//get PRINT ( get GAME_FRAME, wpnheading, goalheading,deltaheading ) ;
+		turn base to y-axis wpnheading now; //<140>
+		//turn aimy1 to y-axis goalheading now; //<140>
+		//wpnheading
+		sleep 1;
+	}
+
+}
+
 Create()
 {
 	hide flare;
@@ -64,6 +232,10 @@ Create()
 	statechg_DesiredState = TRUE;
 	statechg_StateChanging = FALSE;
 	hide flare;
+
+	baseheading = 0;
+	chassisheading = GET 82; //get heading
+	start-script BaseOrient();
 }
 //Create()
 //{
@@ -75,15 +247,15 @@ Create()
 
 StartMoving()
 {
-	start-script Steering();
+	//start-script Steering();
 }
 
 StopMoving()
 {
 	signal SIG_MOVE;
-	stop-spin rfwheel around x-axis;
-	stop-spin lfwheel around x-axis;
-	stop-spin bwheel around x-axis;
+	//stop-spin rfwheel around x-axis;
+	//stop-spin lfwheel around x-axis;
+	//stop-spin bwheel around x-axis;
 }
 
 
@@ -128,6 +300,7 @@ AimPrimary(heading, pitch)
 {
 	signal SIG_AIM;
 	set-signal-mask SIG_AIM;
+	heading = heading - baseheading;
 	turn gun to y-axis heading speed <300.000000>;
 	turn gun to x-axis <0.000000> - pitch speed <300.000000>;
 	if (((get ABS(wpn1_lasthead - heading)) > 65536) OR(((get ABS(wpn1_lasthead - heading)) > 1300) AND ((get ABS(wpn1_lasthead - heading)) < 64236)))
